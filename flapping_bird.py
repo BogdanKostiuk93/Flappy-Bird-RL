@@ -5,6 +5,7 @@ import random
 import time
 import numpy as np
 import pickle
+pygame.font.init()
 
 # левый верхний угол - (0,0)
 WIN_WIDTH = 500
@@ -18,6 +19,8 @@ BIRD_IMGS = [pygame.transform.scale2x(pygame.image.load(os.path.join(img_folder,
 PIPE_IMG = pygame.transform.scale2x(pygame.image.load(os.path.join(img_folder,"pipe.png")))
 BASE_IMG = pygame.transform.scale2x(pygame.image.load(os.path.join(img_folder,"base.png")))
 BG_IMG = pygame.transform.scale2x(pygame.image.load(os.path.join(img_folder,"bg.png")))
+
+STAT_FONT = pygame.font.SysFont("comicsans", 50)
 
 
 class Bird():
@@ -115,17 +118,34 @@ class Pipe:
     self.x -= self.VEL
 
   def draw(self,win):
-    win.blint(self.PIPE_TOP, (self.x,self.top))
-    win.blint(self.PIPE_BOTTOM, (self.x, self.bottom))
+    win.blit(self.PIPE_TOP, (self.x,self.top))
+    win.blit(self.PIPE_BOTTOM, (self.x, self.bottom))
+
+  def collide(self,bird):
+    bird_mask = bird.get_mask()
+    top_mask = pygame.mask.from_surface(self.PIPE_TOP)
+    bottom_mask = pygame.mask.from_surface(self.PIPE_BOTTOM)
+
+    top_offset = (self.x - bird.x, self.top - round(bird.y))
+    bottom_offset = (self.x - bird.x, self.bottom - round(bird.y))
+
+    b_point = bird_mask.overlap(bottom_mask,bottom_offset)
+    t_point = bird_mask.overlap(top_mask,top_offset)
+
+    if t_point or b_point:
+      return True
+    return False
 
 
-
-
-
-
-
-def draw_window(win, bird):
+def draw_window(win, bird, pipes, score):
   win.blit(BG_IMG, (0,0))
+
+  for pipe in pipes:
+    pipe.draw(win)
+
+  text = STAT_FONT.render(f'Score {score}',1,(255,255,255))
+  win.blit(text, (WIN_WIDTH - 10 - text.get_width(),10))
+
   bird.draw(win)
   pygame.display.update()
 
@@ -133,21 +153,52 @@ def draw_window(win, bird):
 # Изначально смотрит вверх!
 
 def main():
-  bird = Bird(200,200)
+  bird = Bird(230,350)
+  pipes = [Pipe(730)]
   win = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
   pygame.display.set_caption("Flappy Bird")
   clock = pygame.time.Clock()
 
   run = True
+  
+  score = 0
+
   while run:
     clock.tick(60)
     for event in pygame.event.get():
       if event.type == pygame.QUIT:
         run = False
 
-    
-    bird.move()
-    draw_window(win, bird)
+    add_pipe = False
+    rem = []
+    for pipe in pipes:
+      if pipe.collide(bird):
+        pass
+
+      if pipe.x + pipe.PIPE_TOP.get_width() < 0:
+        rem.append(pipe)
+      
+      if not pipe.passed and pipe.x < bird.x:
+        pipe.passed = True
+        add_pipe = True
+
+
+      pipe.move()
+
+    if add_pipe:
+      score += 1
+      pipes.append(Pipe(600))
+
+    for r in rem:
+      pipes.remove(r)
+
+    if bird.y + bird.img.get_height() >= WIN_HEIGHT:
+      pass
+
+
+
+    # bird.move()
+    draw_window(win, bird, pipes,score)
 
 
   pygame.quit()
