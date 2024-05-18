@@ -1,15 +1,12 @@
 import pygame
-import neat
 import os
 import random
-import time
-import numpy as np
-import pickle
 pygame.font.init()
 
 # левый верхний угол - (0,0)
 WIN_WIDTH = 500
 WIN_HEIGHT = 800
+FPS = 30
 
 img_folder = 'imgs'
 BIRD_IMGS = [pygame.transform.scale2x(pygame.image.load(os.path.join(img_folder,"bird1.png"))),
@@ -25,11 +22,11 @@ STAT_FONT = pygame.font.SysFont("comicsans", 50)
 
 class Bird():
   IMGS = BIRD_IMGS
-  MAX_ROTATION = 25
-  ROT_VEL = 20
-  ANIMATION_TIME = 5
+  # MAX_ROTATION = 25
+  # ROT_VEL = 20
+  # ANIMATION_TIME = 5
 
-  def __init__(self, x, y):
+  def __init__(self, x, y,MAX_ROTATION = 25,ROT_VEL = 20,ANIMATION_TIME = 5,JUMP_VEL=-10.5,GRAVITY=1.5):
     self.x = x
     self.y = y
     self.tilt = 0
@@ -38,17 +35,22 @@ class Bird():
     self.height = self.y
     self.img_count = 0
     self.img = self.IMGS[0]
+    self.MAX_ROTATION=MAX_ROTATION
+    self.ROT_VEL=ROT_VEL
+    self.ANIMATION_TIME=ANIMATION_TIME
+    self.JUMP_VEL = JUMP_VEL
+    self.GRAVITY = GRAVITY
 
 
   def jump(self):
-    self.vel = -10.5 # вверх - отрицательая скорость
+    self.vel = self.JUMP_VEL # вверх - отрицательая скорость
     self.tick_count = 0
     self.height = self.y
 
   def move(self):
     self.tick_count += 1
 
-    d = self.vel*self.tick_count + 1.5*self.tick_count**2
+    d = self.vel*self.tick_count + self.GRAVITY*self.tick_count**2
 
     if d >= 16:
       d = 16
@@ -93,13 +95,15 @@ class Bird():
 
 
 class Pipe:
-  GAP = 200
-  VEL = 5
+  # GAP = 250
+  # VEL = 5
 
-  def __init__(self, x):
+  def __init__(self, x, VEL=5, GAP=250):
     self.x = x
     self.height = 0
-    self.gap = 100
+    self.GAP = GAP
+    self.VEL = VEL
+
 
     self.top = 0
     self.bottom = 0
@@ -164,16 +168,21 @@ def main():
   score = 0
 
   while run:
-    clock.tick(60)
+    clock.tick(FPS)
     for event in pygame.event.get():
       if event.type == pygame.QUIT:
         run = False
+
+      elif event.type == pygame.MOUSEBUTTONDOWN:
+          if event.button == 1:  # Проверка нажатия левой кнопки мыши
+              bird.jump()
 
     add_pipe = False
     rem = []
     for pipe in pipes:
       if pipe.collide(bird):
-        pass
+        run = False  # Stop the game if there's a collision
+        break
 
       if pipe.x + pipe.PIPE_TOP.get_width() < 0:
         rem.append(pipe)
@@ -184,6 +193,14 @@ def main():
 
 
       pipe.move()
+
+
+    if bird.y + bird.img.get_height() >= WIN_HEIGHT or bird.y < 0:
+      run = False
+      break
+
+    if not run:
+      break
 
     if add_pipe:
       score += 1
@@ -197,12 +214,32 @@ def main():
 
 
 
-    # bird.move()
+    bird.move()
     draw_window(win, bird, pipes,score)
 
+  
+  # Display the final score
+  text = STAT_FONT.render(f'Final Score: {score}', 1, (255, 255, 255))
+  win.blit(text, (WIN_WIDTH // 2 - text.get_width() // 2, WIN_HEIGHT // 2 - text.get_height() // 2))
+  pygame.display.update()
+  # pygame.time.delay(3000)  # Delay to allow the player to see the score
 
-  pygame.quit()
-  quit()
+  # pygame.quit()
+  # quit()
+
+  # Wait for left mouse button click to restart
+  waiting = True
+  while waiting:
+      for event in pygame.event.get():
+          if event.type == pygame.QUIT:
+              waiting = False
+              pygame.quit()
+              quit()
+          if event.type == pygame.MOUSEBUTTONDOWN:
+              if event.button == 1:  # Проверка нажатия левой кнопки мыши
+                  waiting = False
+
+  main()
 
 
 

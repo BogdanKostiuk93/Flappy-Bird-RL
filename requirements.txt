@@ -1,1 +1,4 @@
 pygame
+d3rlpy
+torch
+gym
