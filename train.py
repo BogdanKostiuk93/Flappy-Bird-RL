@@ -1,5 +1,5 @@
 # Импортируем вашу среду
-from flapping_bird_gym import FlappingBirdEnv
+from flapping_bird_gym import FlappingBirdEnv, FlappingBirdEnvNumerical
 import d3rlpy
 import matplotlib.pyplot as plt
 import torch
@@ -7,8 +7,10 @@ import torch
 
 
 def ai_learn():
-    env = FlappingBirdEnv(FPS=10000000, logs=False)
-    eval_env = FlappingBirdEnv(FPS=10000000, logs=False)
+    # env = FlappingBirdEnv(FPS=60, logs=False)
+    # eval_env = FlappingBirdEnv(FPS=60, logs=False)
+    env = FlappingBirdEnvNumerical(FPS=60, logs=False)
+    eval_env = FlappingBirdEnvNumerical(FPS=60, logs=False)
 
     if torch.cuda.is_available():
         print("GPU доступен.")
@@ -19,14 +21,21 @@ def ai_learn():
         device = "cpu:0"
 
     # setup algorithm
-    dqn = d3rlpy.algos.DQNConfig().create(device=device)
+    dqn = d3rlpy.algos.DQNConfig(
+        batch_size=8,
+        learning_rate=2.5e-4,
+        target_update_interval=100,
+        gamma=1,
+    ).create(device=device)
 
     # experience replay buffer
     buffer = d3rlpy.dataset.create_fifo_replay_buffer(limit=100000, env=env)
 
     # exploration strategy
     # in this tutorial, epsilon-greedy policy with static epsilon=0.3
-    explorer = d3rlpy.algos.ConstantEpsilonGreedy(0.3)
+    explorer = d3rlpy.algos.LinearDecayEpsilonGreedy(start_epsilon=1.0,
+                                        end_epsilon=0.01,
+                                        duration=100000)
 
     dqn.fit_online(
         env,

@@ -51,9 +51,12 @@ class Bird():
     self.height = self.y
 
   def move(self):
+    
+    # self.vel = self.vel - 2 * self.GRAVITY * self.tick_count
     self.tick_count += 1
 
     d = self.vel*self.tick_count + self.GRAVITY*self.tick_count**2
+    
 
     if d >= 16:
       d = 16
@@ -229,7 +232,11 @@ class FlappingBirdEnv(gym.Env):
             self.done = True
 
         observation = self._get_observation()
-        reward = 1 if not self.done else -100
+
+        reward = 0.001
+        if not self.done and add_pipe:
+          reward = 1
+
         info = {"score": self.score}
 
         if self.done and self.logs:
@@ -260,10 +267,47 @@ class FlappingBirdEnv(gym.Env):
         pygame.quit()
 
 
+class FlappingBirdEnvNumerical(FlappingBirdEnv):
+    def __init__(self, VEL=5, GAP=250, MAX_ROTATION=25, ROT_VEL=20, ANIMATION_TIME=5, JUMP_VEL=-10.5, 
+                 GRAVITY=1.5, WIN_WIDTH=500, WIN_HEIGHT=800, FPS=20, logs=True, max_score=200):
+        super(FlappingBirdEnvNumerical, self).__init__(VEL, GAP, MAX_ROTATION, ROT_VEL, ANIMATION_TIME, JUMP_VEL, 
+                                                        GRAVITY, WIN_WIDTH, WIN_HEIGHT, FPS, logs, max_score)
+        self.observation_space = spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)
+
+    def _get_observation(self):
+        e1 = self.bird.y / self.WIN_HEIGHT                    # bird pos (нормализовано)
+        e2 = self.bird.vel / self.bird.JUMP_VEL               # bird vel (нормализовано)
+        # Найдем ближайшую трубу, которая еще не пройдена
+        nearest_pipe = None
+        for pipe in self.pipes:
+            if pipe.x + pipe.PIPE_TOP.get_width() >= self.bird.x:
+                nearest_pipe = pipe
+                break
+        
+        if nearest_pipe is None:
+            nearest_pipe = self.pipes[0]
+
+        e3 = (nearest_pipe.x - self.bird.x) / (self.WIN_WIDTH - 50)   # dist to Pipe (нормализовано)
+        e4 = nearest_pipe.top / self.WIN_HEIGHT                       # pipe top (нормализовано)
+        e5 = nearest_pipe.bottom / self.WIN_HEIGHT                    # pipe bot (нормализовано)
+        return np.array([e1, e2, e3, e4, e5], dtype=np.float32)
+
+    def render(self):
+        # Не изменяем метод r
+        super().render()
+
+
+
+
+step_counter = 0
+cum_reward = 0
 if __name__ == "__main__":
-    env = FlappingBirdEnv(FPS=30)
-    episodes = 10
+    env = FlappingBirdEnvNumerical(FPS=30,JUMP_VEL=-10.5)
+    episodes = 1
     for episode in range(episodes):
+        step_counter = 0
+        cum_reward = 0
+        
         obs = env.reset()
         done = False
         while not done:
@@ -277,5 +321,21 @@ if __name__ == "__main__":
                         action = 1
             # action = env.action_space.sample()
             obs, reward, done, truncated, info = env.step(action)
+            print(obs)
+            step_counter += 1
+            cum_reward += reward
             env.render()
+        # print(f'Number of steps = {step_counter}')
+        # print(f'Cumulative reward = {cum_reward}')
+        # print(env.FPS)
+
+
+        with open("maual-results-FPS.csv", "a") as f:
+            f.write(f"{env.FPS},{step_counter},{cum_reward}\n")
     env.close()
+
+# env = FlappingBirdEnv(FPS=30)
+
+# for _ in range(10):
+#   action = env.action_space.sample()
+#   print(action)
