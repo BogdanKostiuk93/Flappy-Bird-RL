@@ -1,5 +1,5 @@
 maual-results-FPS.csv
 d3rlpy_logs
 __pycache__
-auxilary.ipynb
+# auxilary.ipynb
 dqn_flappy_bird.pt

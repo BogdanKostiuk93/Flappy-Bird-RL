@@ -43,6 +43,7 @@ class Bird():
     self.ANIMATION_TIME=ANIMATION_TIME
     self.JUMP_VEL = JUMP_VEL
     self.GRAVITY = GRAVITY
+    # self.GRAVITY = GRAVITY/2 # Приводим к обычной ньютоновской гравитации. Внешний параметр оставляем как есть для совместимости с предыдущей средой
 
 
   def jump(self):
@@ -98,6 +99,45 @@ class Bird():
 
   def get_mask(self):
     return pygame.mask.from_surface(self.img)
+
+class BirdWithVelocity(Bird):
+    def __init__(self, x, y, MAX_ROTATION=25, ROT_VEL=20, ANIMATION_TIME=5, JUMP_VEL=-10.5, GRAVITY=1.5):
+        super().__init__(x, y, MAX_ROTATION, ROT_VEL, ANIMATION_TIME, JUMP_VEL, GRAVITY)
+
+    def jump(self):
+        self.vel = self.JUMP_VEL  # вверх - отрицательая скорость
+        self.tick_count = 0
+        self.height = self.y
+
+    def move(self):
+        self.tick_count += 1
+
+
+        if self.tick_count > 1:
+          # Обновление скорости с учетом гравитации
+          self.vel += self.GRAVITY/2 # Приводим гравитацию к обычной физической (внешнюю оставим для совместимости с исторической средой)
+
+        if self.vel >= - self.JUMP_VEL:
+            self.vel = -self.JUMP_VEL
+
+        # Обновление положения с учетом скорости
+        self.y += self.vel
+
+        # if self.y < 0:
+        #     self.y = 0
+        #     self.vel = 0
+
+        # if self.y + self.img.get_height() >= WIN_HEIGHT:
+        #     self.y = WIN_HEIGHT - self.img.get_height()
+        #     self.vel = 0
+
+        # Обновление наклона (tilt) птицы в зависимости от скорости
+        if self.vel < 0 or self.y < self.height + 50:
+            if self.tilt < self.MAX_ROTATION:
+                self.tilt = self.MAX_ROTATION
+        elif self.tilt > -90:
+            self.tilt -= self.ROT_VEL
+
 
 
 class Pipe:
@@ -165,7 +205,7 @@ def draw_window(win, bird, pipes, score, WIN_WIDTH):
 
 class FlappingBirdEnv(gym.Env):
     def __init__(self, VEL=5, GAP=250, MAX_ROTATION=25, ROT_VEL=20, ANIMATION_TIME=5, JUMP_VEL=-10.5, 
-                 GRAVITY=1.5, WIN_WIDTH=500, WIN_HEIGHT=800, FPS=20, logs=True, max_score=200):
+                 GRAVITY=1.5, WIN_WIDTH=500, WIN_HEIGHT=800, FPS=20, logs=True, max_score=200, Bird = Bird, Pipe=Pipe):
         super(FlappingBirdEnv, self).__init__()
         self.WIN_WIDTH = WIN_WIDTH
         self.WIN_HEIGHT = WIN_HEIGHT
@@ -179,6 +219,8 @@ class FlappingBirdEnv(gym.Env):
         self.GRAVITY = GRAVITY
         self.logs = logs
         self.max_score = max_score
+        self.Bird = Bird
+        self.Pipe = Pipe
 
         self.win = pygame.display.set_mode((self.WIN_WIDTH, self.WIN_HEIGHT))
         pygame.display.set_caption("Flappy Bird")
@@ -190,8 +232,8 @@ class FlappingBirdEnv(gym.Env):
         self.reset()
 
     def reset(self):
-        self.bird = Bird(230, 350, self.MAX_ROTATION, self.ROT_VEL, self.ANIMATION_TIME, self.JUMP_VEL, self.GRAVITY)
-        self.pipes = [Pipe(730, self.VEL, self.GAP)]
+        self.bird = self.Bird(230, 350, self.MAX_ROTATION, self.ROT_VEL, self.ANIMATION_TIME, self.JUMP_VEL, self.GRAVITY)
+        self.pipes = [self.Pipe(730, self.VEL, self.GAP)]
         self.score = 0
         self.done = False
         info = {} # Для своместимость с d3rlpy
@@ -269,14 +311,14 @@ class FlappingBirdEnv(gym.Env):
 
 class FlappingBirdEnvNumerical(FlappingBirdEnv):
     def __init__(self, VEL=5, GAP=250, MAX_ROTATION=25, ROT_VEL=20, ANIMATION_TIME=5, JUMP_VEL=-10.5, 
-                 GRAVITY=1.5, WIN_WIDTH=500, WIN_HEIGHT=800, FPS=20, logs=True, max_score=200):
+                 GRAVITY=1.5, WIN_WIDTH=500, WIN_HEIGHT=800, FPS=20, logs=True, max_score=200, Bird = Bird, Pipe=Pipe):
         super(FlappingBirdEnvNumerical, self).__init__(VEL, GAP, MAX_ROTATION, ROT_VEL, ANIMATION_TIME, JUMP_VEL, 
-                                                        GRAVITY, WIN_WIDTH, WIN_HEIGHT, FPS, logs, max_score)
+                                                        GRAVITY, WIN_WIDTH, WIN_HEIGHT, FPS, logs, max_score, Bird, Pipe)
         self.observation_space = spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)
 
     def _get_observation(self):
         e1 = self.bird.y / self.WIN_HEIGHT                    # bird pos (нормализовано)
-        e2 = self.bird.vel / self.bird.JUMP_VEL               # bird vel (нормализовано)
+        e2 = self.bird.vel / (-self.bird.JUMP_VEL)               # bird vel (нормализовано)
         # Найдем ближайшую трубу, которая еще не пройдена
         nearest_pipe = None
         for pipe in self.pipes:
@@ -297,45 +339,71 @@ class FlappingBirdEnvNumerical(FlappingBirdEnv):
         super().render()
 
 
+# reconstruct full setup from a d3 file
+dql_loaded = d3rlpy.load_learnable("simple_bird_numerical_model_196000.d3")
 
 
-step_counter = 0
-cum_reward = 0
-if __name__ == "__main__":
-    env = FlappingBirdEnvNumerical(FPS=30,JUMP_VEL=-10.5)
-    episodes = 1
-    for episode in range(episodes):
-        step_counter = 0
-        cum_reward = 0
+import torch
+import matplotlib.pyplot as plt
+# Создание среды
+env = FlappingBirdEnvNumerical(FPS=60, logs=False, JUMP_VEL= -3, Bird = Bird)
+
+# Тестирование модели
+obs, _ = env.reset()
+done = False
+while not done:
+    # Добавляем размерность батча
+    obs = np.expand_dims(obs, axis=0)
+    action = dql_loaded.predict(obs)[0]
+    # print(f'predicted action = {action}')
+    obs, reward, done, truncated, info = env.step(action)
+    env.render()
+
+    # # Показать изображение наблюдения (опционально)
+    # plt.imshow(obs[0,:,:], cmap='gray')  # Используем cmap='gray' для одноцветного изображения
+    # plt.axis('off')
+    # plt.show()
+
+env.close()
+
+
+# step_counter = 0
+# cum_reward = 0
+# if __name__ == "__main__":
+#     env = FlappingBirdEnvNumerical(FPS=30,JUMP_VEL=-3,Bird=BirdWithVelocity)
+#     episodes = 1
+#     for episode in range(episodes):
+#         step_counter = 0
+#         cum_reward = 0
         
-        obs = env.reset()
-        done = False
-        while not done:
-            action = 0
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                        pygame.quit()
-                        quit()
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:  # Проверка нажатия левой кнопки мыши
-                        action = 1
-            # action = env.action_space.sample()
-            obs, reward, done, truncated, info = env.step(action)
-            print(obs)
-            step_counter += 1
-            cum_reward += reward
-            env.render()
-        # print(f'Number of steps = {step_counter}')
-        # print(f'Cumulative reward = {cum_reward}')
-        # print(env.FPS)
+#         obs = env.reset()
+#         done = False
+#         while not done:
+#             action = 0
+#             for event in pygame.event.get():
+#                 if event.type == pygame.QUIT:
+#                         pygame.quit()
+#                         quit()
+#                 elif event.type == pygame.MOUSEBUTTONDOWN:
+#                     if event.button == 1:  # Проверка нажатия левой кнопки мыши
+#                         action = 1
+#             # action = env.action_space.sample()
+#             obs, reward, done, truncated, info = env.step(action)
+#             print(obs)
+#             step_counter += 1
+#             cum_reward += reward
+#             env.render()
+#         print(f'Number of steps = {step_counter}')
+#         print(f'Cumulative reward = {cum_reward}')
+#         print(env.FPS)
 
 
-        with open("maual-results-FPS.csv", "a") as f:
-            f.write(f"{env.FPS},{step_counter},{cum_reward}\n")
-    env.close()
+#         with open("maual-results-FPS.csv", "a") as f:
+#             f.write(f"{env.FPS},{step_counter},{cum_reward}\n")
+#     env.close()
 
-# env = FlappingBirdEnv(FPS=30)
+# # env = FlappingBirdEnv(FPS=30)
 
-# for _ in range(10):
-#   action = env.action_space.sample()
-#   print(action)
+# # for _ in range(10):
+# #   action = env.action_space.sample()
+# #   print(action)
